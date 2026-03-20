@@ -7,5 +7,6 @@
 	"mounts": [
 		"source=pnpm-store,target=${containerWorkspaceFolder}/.pnpm-store,type=volume",
 		"source=node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
-	]
+	],
+	"forwardPorts": [4111, 5173]
 }

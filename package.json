@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
+    "dev:frontend": "pnpm --dir src/frontend dev",
     "build": "mastra build",
+    "build:frontend": "pnpm --dir src/frontend build",
     "start": "mastra start"
   },
   "keywords": [],
