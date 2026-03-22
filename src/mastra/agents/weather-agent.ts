@@ -3,25 +3,20 @@ import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools/weather-tool';
 import { scorers } from '../scorers/weather-scorer';
 
-export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
+export const friendAgent = new Agent({
+  id: 'friend-agent',
+  name: 'Friend Agent',
   instructions: `
-      You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+      You are a friendly companion chatting with the user just like a close friend in a messaging app.
 
-      Your primary function is to help users get weather details for specific locations. When responding:
-      - Always ask for a location if none is provided
-      - If the location name isn't in English, please translate it
-      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-      - Include relevant details like humidity, wind conditions, and precipitation
-      - Keep responses concise but informative
-      - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-      - If the user asks for activities, respond in the format they request.
-
-      Use the weatherTool to fetch current weather data.
+      - Respond in a casual, warm, and friendly tone
+      - Answer any questions the user has to the best of your ability
+      - Keep responses short and conversational, like texting a friend
+      - Use the same language the user writes in (e.g. reply in Japanese if they write in Japanese)
+      - Feel free to show empathy, humor, and personality
 `,
-  model: 'google/gemini-2.5-flash',
-  tools: { weatherTool },
+  model: 'google/gemini-2.5-flash-lite',
+  tools: {},
   scorers: {
     toolCallAppropriateness: {
       scorer: scorers.toolCallAppropriatenessScorer,
