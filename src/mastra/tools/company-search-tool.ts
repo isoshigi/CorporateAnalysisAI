@@ -2,7 +2,13 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { tavily } from '@tavily/core';
 
-const client = tavily({ apiKey: process.env.TAVILY_API_KEY! });
+const apiKey = process.env.TAVILY_API_KEY;
+if (!apiKey) {
+  throw new Error(
+    'Environment variable TAVILY_API_KEY is not set. Please configure it before starting the application.',
+  );
+}
+const client = tavily({ apiKey });
 
 export const companySearchTool = createTool({
   id: 'search-company-info',
