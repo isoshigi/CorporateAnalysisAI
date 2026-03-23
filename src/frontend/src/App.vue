@@ -1,7 +1,25 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import ScoreRing from './ScoreRing.vue';
+
+// marked インスタンスを作成し、生HTMLを無効化してXSSを防止する
+const markedInstance = new Marked({
+  renderer: {
+    html(token) {
+      return token.text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+  }
+});
+
+function renderMarkdown(text: string): string {
+  return markedInstance.parse(text) as string;
+}
 
 // 画面の状態を管理する型
 type Step = 'input' | 'analyzing' | 'check' | 'result' | 'chat';
@@ -504,7 +522,7 @@ const scoreLabel = computed(() => {
           </div>
         </div>
 
-        <div class="analysis-body" v-html="marked(analysisText)" />
+        <div class="analysis-body" v-html="renderMarkdown(analysisText)" />
       </template>
 
       <div class="result-actions">
@@ -530,7 +548,7 @@ const scoreLabel = computed(() => {
             class="bubble"
             :class="{ markdown: msg.role === 'assistant' }"
             v-if="msg.role === 'assistant'"
-            v-html="marked(msg.text)"
+            v-html="renderMarkdown(msg.text)"
           />
           <span class="bubble" v-else>{{ msg.text }}</span>
         </div>
