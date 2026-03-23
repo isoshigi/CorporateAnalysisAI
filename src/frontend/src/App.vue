@@ -443,7 +443,7 @@ const scoreDasharray = computed(() => {
   border-radius: 999px;
 }
 
-/* Step 1: Input */
+/* Step 0: Input */
 .step-input {
   flex: 1;
   display: flex;
@@ -640,7 +640,7 @@ const scoreDasharray = computed(() => {
   font-size: 0.95rem;
 }
 
-/* Step 1: Result */
+/* Step 2: Result */
 .step-result {
   flex: 1;
   display: flex;
@@ -775,7 +775,7 @@ const scoreDasharray = computed(() => {
   background: #e5e7eb;
 }
 
-/* Step 2: Chat */
+/* Step 3: AIChat */
 .step-chat {
   flex: 1;
   display: flex;
