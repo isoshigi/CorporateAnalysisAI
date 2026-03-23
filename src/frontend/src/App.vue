@@ -3,6 +3,20 @@ import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
 import ScoreRing from './ScoreRing.vue';
 
+// marked側でHTMLを無効化する（XSS対策）
+marked.use({
+  renderer: {
+    html({ raw }: { raw: string }) {
+      return raw
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+  },
+});
+
 // 画面の状態を管理する型
 type Step = 'input' | 'analyzing' | 'check' | 'result' | 'chat';
 
