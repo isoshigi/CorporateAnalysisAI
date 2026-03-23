@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
 
 // 画面の状態を管理する型
@@ -14,13 +14,31 @@ interface ChatMessage {
 // 現在の画面ステップ
 const step = ref<Step>('input');
 
-// 分析フォームの入力値
+// localStorageから保存済みの入力値を読み込む
+function loadFromStorage<T>(key: string, fallback: T): T {
+  const saved = localStorage.getItem(key);
+  if (saved === null) return fallback;
+  try {
+    return JSON.parse(saved) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+// 分析フォームの入力値（localStorageから復元）
 const companyName = ref('');
-const techStack = ref('');
-const jobTypes = ref(['', '', '']);
-const salaryType = ref<'年収' | '月収'>('年収');
-const salaryAmount = ref('');
-const graduationType = ref('');
+const techStack = ref(loadFromStorage('techStack', ''));
+const jobTypes = ref(loadFromStorage('jobTypes', ['', '', '']));
+const salaryType = ref<'年収' | '月収'>(loadFromStorage('salaryType', '年収'));
+const salaryAmount = ref(loadFromStorage('salaryAmount', ''));
+const graduationType = ref(loadFromStorage('graduationType', ''));
+
+// 入力値が変わるたびにlocalStorageに保存する
+watch(techStack, v => localStorage.setItem('techStack', JSON.stringify(v)));
+watch(jobTypes, v => localStorage.setItem('jobTypes', JSON.stringify(v)), { deep: true });
+watch(salaryType, v => localStorage.setItem('salaryType', JSON.stringify(v)));
+watch(salaryAmount, v => localStorage.setItem('salaryAmount', JSON.stringify(v)));
+watch(graduationType, v => localStorage.setItem('graduationType', JSON.stringify(v)));
 
 // 分析結果
 const analysisText = ref('');
@@ -101,16 +119,18 @@ function startChat() {
   step.value = 'chat';
 }
 
-// 入力画面に戻り、すべての状態をリセットする
+// 入力画面に戻り、分析結果をリセットする（入力値はlocalStorageから復元）
 function resetToInput() {
   step.value = 'input';
   chatMessages.value = [];
   analysisText.value = '';
   matchScore.value = null;
-  jobTypes.value = ['', '', ''];
-  salaryType.value = '年収';
-  salaryAmount.value = '';
-  graduationType.value = '';
+  companyName.value = '';
+  techStack.value = loadFromStorage('techStack', '');
+  jobTypes.value = loadFromStorage('jobTypes', ['', '', '']);
+  salaryType.value = loadFromStorage('salaryType', '年収');
+  salaryAmount.value = loadFromStorage('salaryAmount', '');
+  graduationType.value = loadFromStorage('graduationType', '');
 }
 
 // チャットメッセージを送信し、AIの返答を取得する
