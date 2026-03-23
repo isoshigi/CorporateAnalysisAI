@@ -32,6 +32,12 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+// 企業情報の入力モード
+type InputMode = 'manual' | 'extract';
+const inputMode = ref<InputMode>('manual');
+const extractText = ref('');
+const extracting = ref(false);
+
 // 分析フォームの入力値（localStorageから復元）
 const companyName = ref('');
 const jobCategory = ref('');  // 採用カテゴリー（企業側・毎回入力）
@@ -189,6 +195,36 @@ function resetToInput() {
   graduationType.value = loadFromStorage('graduationType', '');
 }
 
+// テキストから企業名と採用カテゴリーを抽出してフォームに反映する
+async function extractFromText() {
+  const text = extractText.value.trim();
+  if (!text || extracting.value) return;
+
+  extracting.value = true;
+  try {
+    const res = await fetch('/api/agents/company-research-agent/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: `【抽出】\n${text}` }],
+      }),
+    });
+    const data = await res.json();
+    const reply = (data.text ?? '').trim();
+    // ```json...``` ブロックや裸のJSONにも対応
+    const jsonMatch = reply.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.companyName) companyName.value = parsed.companyName;
+      if (parsed.jobCategory) jobCategory.value = parsed.jobCategory;
+    }
+  } catch {
+    // 抽出失敗時はフィールドを空のまま維持
+  } finally {
+    extracting.value = false;
+  }
+}
+
 // チャットメッセージを送信し、AIの返答を取得する
 async function sendChat() {
   const text = chatInput.value.trim();
@@ -339,6 +375,37 @@ const scoreDasharray = computed(() => {
               type="button"
             >{{ opt }}</button>
           </div>
+        </div>
+
+        <div class="input-mode-toggle">
+          <button
+            :class="['toggle-btn', { active: inputMode === 'manual' }]"
+            @click="inputMode = 'manual'"
+            type="button"
+          >企業情報を入力</button>
+          <button
+            :class="['toggle-btn', { active: inputMode === 'extract' }]"
+            @click="inputMode = 'extract'"
+            type="button"
+          >テキストから自動判定</button>
+        </div>
+
+        <div v-if="inputMode === 'extract'" class="field">
+          <label class="field-label">メール・テキストを貼り付け</label>
+          <textarea
+            v-model="extractText"
+            class="field-textarea"
+            placeholder="採用担当からのメール本文などを貼り付けてください"
+            rows="5"
+          />
+          <button
+            class="extract-btn"
+            :disabled="!extractText.trim() || extracting"
+            @click="extractFromText"
+            type="button"
+          >
+            {{ extracting ? '抽出中...' : '企業情報を抽出する' }}
+          </button>
         </div>
 
         <div class="field">
@@ -565,6 +632,48 @@ const scoreDasharray = computed(() => {
 }
 
 /* Step 0: Input */
+.input-mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.input-mode-toggle .toggle-btn {
+  flex: 1;
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid #e5e7eb;
+}
+
+.input-mode-toggle .toggle-btn:last-child {
+  border-right: none;
+}
+
+.extract-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px;
+  background: #4f7df3;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.extract-btn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.extract-btn:hover:not(:disabled) {
+  background: #3b6de0;
+}
+
 .step-input {
   flex: 1;
   display: flex;
