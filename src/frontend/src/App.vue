@@ -70,6 +70,16 @@ const chatMessages = ref<ChatMessage[]>([]);
 const chatInput = ref('');
 const chatLoading = ref(false);
 
+// marked() の呼び出し結果をキャッシュする computed プロパティ
+// テンプレートで直接 marked() を呼ぶと、無関係な state 更新のたびに
+// Markdown パースが走るため、computed でキャッシュすることで無駄な計算を防ぐ。
+const analysisHtml = computed(() => marked(analysisText.value) as string);
+const chatHtmlList = computed(() =>
+  chatMessages.value.map(msg =>
+    msg.role === 'assistant' ? (marked(msg.text) as string) : ''
+  )
+);
+
 // AIの回答テキストからマッチスコアを抽出する
 function extractMatchScore(text: string): number | null {
   // MATCH_SCORE:XX 形式（[]あり・なし・全角コロン対応）
@@ -504,7 +514,7 @@ const scoreLabel = computed(() => {
           </div>
         </div>
 
-        <div class="analysis-body" v-html="marked(analysisText)" />
+        <div class="analysis-body" v-html="analysisHtml" />
       </template>
 
       <div class="result-actions">
@@ -530,7 +540,7 @@ const scoreLabel = computed(() => {
             class="bubble"
             :class="{ markdown: msg.role === 'assistant' }"
             v-if="msg.role === 'assistant'"
-            v-html="marked(msg.text)"
+            v-html="chatHtmlList[i]"
           />
           <span class="bubble" v-else>{{ msg.text }}</span>
         </div>
