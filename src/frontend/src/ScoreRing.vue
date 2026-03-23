@@ -9,7 +9,7 @@ const props = defineProps<{
 const circumference = 251.33; // 2π × 40
 
 const dasharray = computed(() => {
-  const s = props.score ?? 0;
+  const s = Math.min(100, Math.max(0, props.score ?? 0));
   const filled = (s / 100) * circumference;
   return `${filled} ${circumference}`;
 });
