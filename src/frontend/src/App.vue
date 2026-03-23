@@ -3,7 +3,14 @@ import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
 
 // 画面の状態を管理する型
-type Step = 'input' | 'analyzing' | 'result' | 'chat';
+type Step = 'input' | 'analyzing' | 'check' | 'result' | 'chat';
+
+// 各項目のスコア
+interface ItemScore {
+  label: string;
+  score: number;
+  max: number;
+}
 
 // チャットのメッセージの型
 interface ChatMessage {
@@ -27,8 +34,10 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 // 分析フォームの入力値（localStorageから復元）
 const companyName = ref('');
+const jobCategory = ref('');  // 採用カテゴリー（企業側・毎回入力）
 const techStack = ref(loadFromStorage('techStack', ''));
 const jobTypes = ref(loadFromStorage('jobTypes', ['', '', '']));
+const preferredLocation = ref(loadFromStorage('preferredLocation', ''));  // 希望勤務地（保存）
 const salaryType = ref<'年収' | '月収'>(loadFromStorage('salaryType', '年収'));
 const salaryAmount = ref(loadFromStorage('salaryAmount', ''));
 const graduationType = ref(loadFromStorage('graduationType', ''));
@@ -36,6 +45,7 @@ const graduationType = ref(loadFromStorage('graduationType', ''));
 // 入力値が変わるたびにlocalStorageに保存する
 watch(techStack, v => localStorage.setItem('techStack', JSON.stringify(v)));
 watch(jobTypes, v => localStorage.setItem('jobTypes', JSON.stringify(v)), { deep: true });
+watch(preferredLocation, v => localStorage.setItem('preferredLocation', JSON.stringify(v)));
 watch(salaryType, v => localStorage.setItem('salaryType', JSON.stringify(v)));
 watch(salaryAmount, v => localStorage.setItem('salaryAmount', JSON.stringify(v)));
 watch(graduationType, v => localStorage.setItem('graduationType', JSON.stringify(v)));
@@ -45,6 +55,8 @@ const analysisText = ref('');
 const matchScore = ref<number | null>(null);
 const analysisError = ref('');
 const analysisUserContent = ref('');
+const itemScores = ref<ItemScore[]>([]);
+const summaryComment = ref('');
 
 // チャット関連
 const chatMessages = ref<ChatMessage[]>([]);
@@ -67,6 +79,36 @@ function cleanAnalysisText(text: string): string {
   return text.replace(/【重要】.*\n/g, '').replace(/MATCH_SCORE[：:]\s*\[?\d+\]?\n?/g, '').trim();
 }
 
+// AIの回答から各項目のスコアを抽出する
+function extractItemScores(text: string): ItemScore[] {
+  const items = [
+    { label: '給料・待遇', max: 40 },
+    { label: '企業規模・安定性', max: 10 },
+    { label: '業務内容', max: 25 },
+    { label: '技術スタック', max: 25 },
+  ];
+  return items.map(item => {
+    const re = new RegExp(`${item.label}（(\\d+)\\/${item.max}点）`);
+    const m = text.match(re);
+    return { label: item.label, score: m ? parseInt(m[1]) : 0, max: item.max };
+  });
+}
+
+// AIの回答から総合コメントの1行目を抽出する
+function extractSummaryComment(text: string): string {
+  const m = text.match(/総合コメント\s*\n+([\s\S]+?)(?:\n---|\n##|$)/);
+  if (!m) return '';
+  return m[1].trim().split('\n')[0].replace(/^\*+|\*+$/g, '').trim();
+}
+
+// 項目スコアの割合に応じた色を返す
+function itemBarColor(item: ItemScore): string {
+  const pct = item.score / item.max;
+  if (pct >= 0.7) return '#22c55e';
+  if (pct >= 0.4) return '#f59e0b';
+  return '#ef4444';
+}
+
 // 企業と技術スタックの分析
 async function analyze() {
   
@@ -82,14 +124,16 @@ async function analyze() {
   analysisError.value = '';
   
   // ユーザーの入力をもとに分析用のプロンプトを生成
+  const jobCategoryLine = jobCategory.value.trim() ? `\n採用カテゴリー：${jobCategory.value.trim()}` : '';
   const filledJobs = jobTypes.value.map(j => j.trim()).filter(Boolean);
   const jobLine = filledJobs.length > 0 ? `\n希望職種：${filledJobs.join('、')}` : '';
+  const locationLine = preferredLocation.value.trim() ? `\n希望勤務地：${preferredLocation.value.trim()}` : '';
   const salaryStr = String(salaryAmount.value).trim();
   const salaryLine = salaryStr
     ? `\n希望給与：${salaryType.value} ${salaryStr}万円`
     : '';
   const graduationLine = graduationType.value ? `\n卒業区分：${graduationType.value}` : '';
-  const userContent = `【分析】\n企業名：${company}${jobLine}${salaryLine}${graduationLine}\n技術スタック：${tech}`;
+  const userContent = `【分析】\n企業名：${company}${jobCategoryLine}${jobLine}${locationLine}${salaryLine}${graduationLine}\n技術スタック：${tech}`;
   analysisUserContent.value = userContent;
   
   // APIに分析をリクエスト
@@ -105,8 +149,16 @@ async function analyze() {
     const data = await res.json();
     const reply = data.text ?? JSON.stringify(data);
     matchScore.value = extractMatchScore(reply);
-    analysisText.value = cleanAnalysisText(reply);
-    step.value = 'result';
+    const cleaned = cleanAnalysisText(reply);
+    analysisText.value = cleaned;
+    itemScores.value = extractItemScores(reply);
+    summaryComment.value = extractSummaryComment(cleaned);
+    // 50点以下の場合は確認画面を挟む
+    if (matchScore.value !== null && matchScore.value <= 50) {
+      step.value = 'check';
+    } else {
+      step.value = 'result';
+    }
   } catch {
     analysisError.value = 'エラーが発生しました。もう一度お試しください。';
     step.value = 'result';
@@ -125,9 +177,13 @@ function resetToInput() {
   chatMessages.value = [];
   analysisText.value = '';
   matchScore.value = null;
+  itemScores.value = [];
+  summaryComment.value = '';
   companyName.value = '';
+  jobCategory.value = '';
   techStack.value = loadFromStorage('techStack', '');
   jobTypes.value = loadFromStorage('jobTypes', ['', '', '']);
+  preferredLocation.value = loadFromStorage('preferredLocation', '');
   salaryType.value = loadFromStorage('salaryType', '年収');
   salaryAmount.value = loadFromStorage('salaryAmount', '');
   graduationType.value = loadFromStorage('graduationType', '');
@@ -264,6 +320,15 @@ const scoreDasharray = computed(() => {
         </div>
 
         <div class="field">
+          <label class="field-label">希望勤務地 <span class="field-optional">（任意）</span></label>
+          <input
+            v-model="preferredLocation"
+            class="field-input"
+            placeholder="例：東京都内、リモート可"
+          />
+        </div>
+
+        <div class="field">
           <label class="field-label">卒業区分 <span class="field-optional">（任意）</span></label>
           <div class="graduation-row">
             <button
@@ -282,6 +347,15 @@ const scoreDasharray = computed(() => {
             v-model="companyName"
             class="field-input"
             placeholder="例：株式会社〇〇"
+          />
+        </div>
+
+        <div class="field">
+          <label class="field-label">採用カテゴリー <span class="field-optional">（任意）</span></label>
+          <input
+            v-model="jobCategory"
+            class="field-input"
+            placeholder="例：フロントエンドエンジニア（新卒）"
           />
         </div>
 
@@ -312,7 +386,54 @@ const scoreDasharray = computed(() => {
       <p class="analyzing-text">企業情報と技術スタックを分析中...</p>
     </div>
 
-    <!-- Step 2: 結果を表示 -->
+    <!-- Step 2: 低スコア確認画面 -->
+    <div v-if="step === 'check'" class="step-check">
+      <div class="check-card">
+        <div class="check-header">
+          <svg class="score-ring" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="10" />
+            <circle
+              cx="50" cy="50" r="40"
+              fill="none"
+              :stroke="scoreColor"
+              stroke-width="10"
+              stroke-linecap="round"
+              :stroke-dasharray="scoreDasharray"
+              transform="rotate(-90 50 50)"
+            />
+            <text x="50" y="46" text-anchor="middle" font-size="22" font-weight="bold" :fill="scoreColor">
+              {{ matchScore ?? '?' }}
+            </text>
+            <text x="50" y="62" text-anchor="middle" font-size="10" fill="#6b7280">/ 100</text>
+          </svg>
+          <div class="check-meta">
+            <div class="score-company">{{ companyName }}</div>
+            <div class="score-label-badge" :style="{ color: scoreColor }">{{ scoreLabel }}</div>
+            <p v-if="summaryComment" class="check-summary">{{ summaryComment }}</p>
+          </div>
+        </div>
+
+        <div class="check-items">
+          <div v-for="item in itemScores" :key="item.label" class="check-item">
+            <span class="check-item-label">{{ item.label }}</span>
+            <div class="check-item-bar-wrap">
+              <div
+                class="check-item-bar"
+                :style="{ width: `${(item.score / item.max) * 100}%`, background: itemBarColor(item) }"
+              />
+            </div>
+            <span class="check-item-score">{{ item.score }}/{{ item.max }}</span>
+          </div>
+        </div>
+
+        <div class="check-actions">
+          <button class="chat-btn" @click="step = 'result'">詳細レポートを見る</button>
+          <button class="reset-btn" @click="resetToInput">検索に戻る</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: 結果を表示 -->
     <div v-if="step === 'result'" class="step-result">
       <div v-if="analysisError" class="error-box">{{ analysisError }}</div>
 
@@ -640,7 +761,94 @@ const scoreDasharray = computed(() => {
   font-size: 0.95rem;
 }
 
-/* Step 2: Result */
+/* Step 2: Check */
+.step-check {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+}
+
+.check-card {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.check-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.check-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.check-summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.check-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-item-label {
+  width: 130px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.check-item-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.check-item-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.check-item-score {
+  width: 40px;
+  text-align: right;
+  font-size: 0.8rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.check-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Step 3: Result */
 .step-result {
   flex: 1;
   display: flex;
