@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { marked } from 'marked';
+import ScoreRing from './ScoreRing.vue';
 
 // 画面の状態を管理する型
 type Step = 'input' | 'analyzing' | 'check' | 'result' | 'chat';
@@ -167,7 +168,7 @@ async function analyze() {
     }
   } catch {
     analysisError.value = 'エラーが発生しました。もう一度お試しください。';
-    step.value = 'result';
+    step.value = 'input';
   }
 }
 
@@ -288,15 +289,6 @@ const scoreLabel = computed(() => {
   return '低マッチ';
 });
 
-// SVGリングの円周（r=40, 2π×40 ≈ 251.33）
-const scoreCircumference = 251.33;
-
-// スコアに応じてリングの塗り量を計算する
-const scoreDasharray = computed(() => {
-  const s = matchScore.value ?? 0;
-  const filled = (s / 100) * scoreCircumference;
-  return `${filled} ${scoreCircumference}`;
-});
 </script>
 
 <template>
@@ -457,22 +449,7 @@ const scoreDasharray = computed(() => {
     <div v-if="step === 'check'" class="step-check">
       <div class="check-card">
         <div class="check-header">
-          <svg class="score-ring" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="10" />
-            <circle
-              cx="50" cy="50" r="40"
-              fill="none"
-              :stroke="scoreColor"
-              stroke-width="10"
-              stroke-linecap="round"
-              :stroke-dasharray="scoreDasharray"
-              transform="rotate(-90 50 50)"
-            />
-            <text x="50" y="46" text-anchor="middle" font-size="22" font-weight="bold" :fill="scoreColor">
-              {{ matchScore ?? '?' }}
-            </text>
-            <text x="50" y="62" text-anchor="middle" font-size="10" fill="#6b7280">/ 100</text>
-          </svg>
+          <ScoreRing :score="matchScore" :color="scoreColor" />
           <div class="check-meta">
             <div class="score-company">{{ companyName }}</div>
             <div class="score-label-badge" :style="{ color: scoreColor }">{{ scoreLabel }}</div>
@@ -500,32 +477,30 @@ const scoreDasharray = computed(() => {
       </div>
     </div>
 
-    <!-- Step 3: 結果を表示 -->
+    <!-- Step 3: 詳細レポート -->
     <div v-if="step === 'result'" class="step-result">
       <div v-if="analysisError" class="error-box">{{ analysisError }}</div>
 
       <template v-else>
         <div class="score-section">
-          <svg class="score-ring" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="10" />
-            <circle
-              cx="50" cy="50" r="40"
-              fill="none"
-              :stroke="scoreColor"
-              stroke-width="10"
-              stroke-linecap="round"
-              :stroke-dasharray="scoreDasharray"
-              transform="rotate(-90 50 50)"
-            />
-            <text x="50" y="46" text-anchor="middle" font-size="22" font-weight="bold" :fill="scoreColor">
-              {{ matchScore ?? '?' }}
-            </text>
-            <text x="50" y="62" text-anchor="middle" font-size="10" fill="#6b7280">/ 100</text>
-          </svg>
+          <ScoreRing :score="matchScore" :color="scoreColor" />
           <div class="score-meta">
             <div class="score-company">{{ companyName }}</div>
             <div class="score-label-badge" :style="{ color: scoreColor }">{{ scoreLabel }}</div>
             <p class="score-description">あなたの技術スタックとのマッチ度</p>
+          </div>
+        </div>
+
+        <div v-if="itemScores.length > 0" class="score-items">
+          <div v-for="item in itemScores" :key="item.label" class="check-item">
+            <span class="check-item-label">{{ item.label }}</span>
+            <div class="check-item-bar-wrap">
+              <div
+                class="check-item-bar"
+                :style="{ width: `${(item.score / item.max) * 100}%`, background: itemBarColor(item) }"
+              />
+            </div>
+            <span class="check-item-score">{{ item.score }}/{{ item.max }}</span>
           </div>
         </div>
 
@@ -540,7 +515,7 @@ const scoreDasharray = computed(() => {
       </div>
     </div>
 
-    <!-- Step 3: AIChat -->
+    <!-- Step 4: AIChat -->
     <div v-if="step === 'chat'" class="step-chat">
       <div class="message-list">
         <div v-if="chatMessages.length === 0" class="chat-hint">
@@ -958,6 +933,16 @@ const scoreDasharray = computed(() => {
 }
 
 /* Step 3: Result */
+.score-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
 .step-result {
   flex: 1;
   display: flex;
