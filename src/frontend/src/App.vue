@@ -12,6 +12,10 @@ interface ChatMessage {
 const step = ref<Step>('input');
 const companyName = ref('');
 const techStack = ref('');
+const jobTypes = ref(['', '', '']);
+const salaryType = ref<'年収' | '月収'>('年収');
+const salaryAmount = ref('');
+const graduationType = ref('');
 const analysisText = ref('');
 const matchScore = ref<number | null>(null);
 const analysisError = ref('');
@@ -22,12 +26,17 @@ const chatInput = ref('');
 const chatLoading = ref(false);
 
 function extractMatchScore(text: string): number | null {
-  const match = text.match(/MATCH_SCORE[：:]\s*(\d+)/);
-  return match ? Math.min(100, Math.max(0, parseInt(match[1]))) : null;
+  // MATCH_SCORE:XX 形式（[]あり・なし・全角コロン対応）
+  let m = text.match(/MATCH_SCORE[：:]\s*\[?(\d+)\]?/);
+  if (m) return Math.min(100, Math.max(0, parseInt(m[1])));
+  // フォールバック: ## マッチ度分析（スコア：XX/100）形式
+  m = text.match(/スコア[：:＊* ]*(\d+)\s*[/／]/);
+  if (m) return Math.min(100, Math.max(0, parseInt(m[1])));
+  return null;
 }
 
 function cleanAnalysisText(text: string): string {
-  return text.replace(/MATCH_SCORE[：:]\s*\d+\n?/g, '').trim();
+  return text.replace(/【重要】.*\n/g, '').replace(/MATCH_SCORE[：:]\s*\[?\d+\]?\n?/g, '').trim();
 }
 
 async function analyze() {
@@ -38,7 +47,14 @@ async function analyze() {
   step.value = 'analyzing';
   analysisError.value = '';
 
-  const userContent = `【分析】\n企業名：${company}\n技術スタック：${tech}`;
+  const filledJobs = jobTypes.value.map(j => j.trim()).filter(Boolean);
+  const jobLine = filledJobs.length > 0 ? `\n希望職種：${filledJobs.join('、')}` : '';
+  const salaryStr = String(salaryAmount.value).trim();
+  const salaryLine = salaryStr
+    ? `\n希望給与：${salaryType.value} ${salaryStr}万円`
+    : '';
+  const graduationLine = graduationType.value ? `\n卒業区分：${graduationType.value}` : '';
+  const userContent = `【分析】\n企業名：${company}${jobLine}${salaryLine}${graduationLine}\n技術スタック：${tech}`;
   analysisUserContent.value = userContent;
 
   try {
@@ -71,6 +87,10 @@ function resetToInput() {
   chatMessages.value = [];
   analysisText.value = '';
   matchScore.value = null;
+  jobTypes.value = ['', '', ''];
+  salaryType.value = '年収';
+  salaryAmount.value = '';
+  graduationType.value = '';
 }
 
 async function sendChat() {
@@ -150,10 +170,62 @@ const scoreDasharray = computed(() => {
     <!-- Step 1: Input -->
     <div v-if="step === 'input'" class="step-input">
       <div class="input-card">
-        <div class="input-card-title">分析する企業と技術スタックを入力</div>
+        <div class="input-card-title">分析する企業と条件を入力</div>
 
         <div class="field">
-          <label class="field-label">企業名</label>
+          <label class="field-label">希望する職種 <span class="field-optional">（最大3つ）</span></label>
+          <div class="job-type-row">
+            <input
+              v-for="(_, i) in jobTypes"
+              :key="i"
+              v-model="jobTypes[i]"
+              class="field-input job-input"
+              :placeholder="`職種 ${i + 1}`"
+            />
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">希望給与 <span class="field-optional">（任意）</span></label>
+          <div class="salary-row">
+            <div class="salary-toggle">
+              <button
+                :class="['toggle-btn', { active: salaryType === '年収' }]"
+                @click="salaryType = '年収'"
+                type="button"
+              >年収</button>
+              <button
+                :class="['toggle-btn', { active: salaryType === '月収' }]"
+                @click="salaryType = '月収'"
+                type="button"
+              >月収</button>
+            </div>
+            <input
+              v-model="salaryAmount"
+              class="field-input salary-input"
+              type="number"
+              min="0"
+              placeholder="例：500"
+            />
+            <span class="salary-unit">万円</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">卒業区分 <span class="field-optional">（任意）</span></label>
+          <div class="graduation-row">
+            <button
+              v-for="opt in ['高卒', '学部卒', '修士卒', '博士卒']"
+              :key="opt"
+              :class="['toggle-btn', 'graduation-btn', { active: graduationType === opt }]"
+              @click="graduationType = graduationType === opt ? '' : opt"
+              type="button"
+            >{{ opt }}</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">会社名</label>
           <input
             v-model="companyName"
             class="field-input"
@@ -383,6 +455,88 @@ const scoreDasharray = computed(() => {
   margin: 0;
   font-size: 0.78rem;
   color: #9ca3af;
+}
+
+.field-optional {
+  font-weight: 400;
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.job-type-row {
+  display: flex;
+  gap: 8px;
+}
+
+.job-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.salary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.salary-toggle {
+  display: flex;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.toggle-btn {
+  padding: 9px 14px;
+  background: #fff;
+  border: none;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toggle-btn.active {
+  background: #4f7df3;
+  color: #fff;
+  font-weight: bold;
+}
+
+.salary-input {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.salary-unit {
+  font-size: 0.9rem;
+  color: #555;
+  white-space: nowrap;
+}
+
+.graduation-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.graduation-btn {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.88rem;
+}
+
+.graduation-btn.active {
+  background: #4f7df3;
+  color: #fff;
+  border-color: #4f7df3;
+  font-weight: bold;
+}
+
+.graduation-btn:not(.active) {
+  background: #fff;
+  color: #374151;
 }
 
 .analyze-btn {
