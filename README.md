@@ -21,7 +21,7 @@ A separate Vue + Vite frontend lives in `src/frontend`.
 Start it with:
 
 ```shell
-pnpm --dir src/frontend dev
+pnpm run dev:frontend
 ```
 
 By default it runs on [http://localhost:5173](http://localhost:5173) and proxies `/api` to Mastra Studio on port `4111`.
