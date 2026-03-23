@@ -2,29 +2,38 @@
 import { ref, computed } from 'vue';
 import { marked } from 'marked';
 
+// 画面の状態を管理する型
 type Step = 'input' | 'analyzing' | 'result' | 'chat';
 
+// チャットのメッセージの型
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
 }
 
+// 現在の画面ステップ
 const step = ref<Step>('input');
+
+// 分析フォームの入力値
 const companyName = ref('');
 const techStack = ref('');
 const jobTypes = ref(['', '', '']);
 const salaryType = ref<'年収' | '月収'>('年収');
 const salaryAmount = ref('');
 const graduationType = ref('');
+
+// 分析結果
 const analysisText = ref('');
 const matchScore = ref<number | null>(null);
 const analysisError = ref('');
 const analysisUserContent = ref('');
 
+// チャット関連
 const chatMessages = ref<ChatMessage[]>([]);
 const chatInput = ref('');
 const chatLoading = ref(false);
 
+// AIの回答テキストからマッチスコアを抽出する
 function extractMatchScore(text: string): number | null {
   // MATCH_SCORE:XX 形式（[]あり・なし・全角コロン対応）
   let m = text.match(/MATCH_SCORE[：:]\s*\[?(\d+)\]?/);
@@ -35,18 +44,26 @@ function extractMatchScore(text: string): number | null {
   return null;
 }
 
+// 表示不要な指示テキストをAIの回答から除去する
 function cleanAnalysisText(text: string): string {
   return text.replace(/【重要】.*\n/g, '').replace(/MATCH_SCORE[：:]\s*\[?\d+\]?\n?/g, '').trim();
 }
 
+// 企業と技術スタックの分析
 async function analyze() {
+  
+  // 空白や改行の除去
   const company = companyName.value.trim();
   const tech = techStack.value.trim();
-  if (!company || !tech) return;
 
+  // 入力に不備がある場合は処理を中断
+  if (!company || !tech) return;
+  
+  // 分析開始
   step.value = 'analyzing';
   analysisError.value = '';
-
+  
+  // ユーザーの入力をもとに分析用のプロンプトを生成
   const filledJobs = jobTypes.value.map(j => j.trim()).filter(Boolean);
   const jobLine = filledJobs.length > 0 ? `\n希望職種：${filledJobs.join('、')}` : '';
   const salaryStr = String(salaryAmount.value).trim();
@@ -56,7 +73,8 @@ async function analyze() {
   const graduationLine = graduationType.value ? `\n卒業区分：${graduationType.value}` : '';
   const userContent = `【分析】\n企業名：${company}${jobLine}${salaryLine}${graduationLine}\n技術スタック：${tech}`;
   analysisUserContent.value = userContent;
-
+  
+  // APIに分析をリクエスト
   try {
     const res = await fetch('/api/agents/company-research-agent/generate', {
       method: 'POST',
@@ -77,11 +95,13 @@ async function analyze() {
   }
 }
 
+// チャット画面に遷移する
 function startChat() {
   chatMessages.value = [];
   step.value = 'chat';
 }
 
+// 入力画面に戻り、すべての状態をリセットする
 function resetToInput() {
   step.value = 'input';
   chatMessages.value = [];
@@ -93,15 +113,20 @@ function resetToInput() {
   graduationType.value = '';
 }
 
+// チャットメッセージを送信し、AIの返答を取得する
 async function sendChat() {
   const text = chatInput.value.trim();
+
+  // 空メッセージや送信中は処理しない
   if (!text || chatLoading.value) return;
 
+  // ユーザーのメッセージを即座に表示する
   chatMessages.value.push({ role: 'user', text });
   chatInput.value = '';
   chatLoading.value = true;
 
   try {
+    // 分析結果を会話の文脈として含め、APIにリクエストする
     const messages = [
       { role: 'user', content: analysisUserContent.value },
       { role: 'assistant', content: analysisText.value },
@@ -117,6 +142,8 @@ async function sendChat() {
 
     const data = await res.json();
     const reply = data.text ?? JSON.stringify(data);
+
+    // AIの返答を表示する
     chatMessages.value.push({ role: 'assistant', text: reply });
   } catch {
     chatMessages.value.push({ role: 'assistant', text: 'エラーが発生しました。' });
@@ -125,6 +152,7 @@ async function sendChat() {
   }
 }
 
+// Enterキーで送信（Shift+Enterは改行）
 function onChatKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -132,6 +160,7 @@ function onChatKeydown(e: KeyboardEvent) {
   }
 }
 
+// スコアに応じてリングの色を変える
 const scoreColor = computed(() => {
   const s = matchScore.value ?? 0;
   if (s >= 70) return '#22c55e';
@@ -139,6 +168,7 @@ const scoreColor = computed(() => {
   return '#ef4444';
 });
 
+// スコアに応じてラベルを変える
 const scoreLabel = computed(() => {
   const s = matchScore.value ?? 0;
   if (s >= 70) return '高マッチ';
@@ -146,8 +176,10 @@ const scoreLabel = computed(() => {
   return '低マッチ';
 });
 
-// SVG circle: r=40, circumference = 2π×40 ≈ 251.33
+// SVGリングの円周（r=40, 2π×40 ≈ 251.33）
 const scoreCircumference = 251.33;
+
+// スコアに応じてリングの塗り量を計算する
 const scoreDasharray = computed(() => {
   const s = matchScore.value ?? 0;
   const filled = (s / 100) * scoreCircumference;
@@ -167,7 +199,7 @@ const scoreDasharray = computed(() => {
       </div>
     </header>
 
-    <!-- Step 1: Input -->
+    <!-- Step 0: 入力画面 -->
     <div v-if="step === 'input'" class="step-input">
       <div class="input-card">
         <div class="input-card-title">分析する企業と条件を入力</div>
@@ -254,13 +286,13 @@ const scoreDasharray = computed(() => {
       </div>
     </div>
 
-    <!-- Step 1: Analyzing -->
+    <!-- Step 1: 分析中 -->
     <div v-if="step === 'analyzing'" class="step-analyzing">
       <div class="analyzing-spinner" />
       <p class="analyzing-text">企業情報と技術スタックを分析中...</p>
     </div>
 
-    <!-- Step 1: Result -->
+    <!-- Step 2: 結果を表示 -->
     <div v-if="step === 'result'" class="step-result">
       <div v-if="analysisError" class="error-box">{{ analysisError }}</div>
 
@@ -300,7 +332,7 @@ const scoreDasharray = computed(() => {
       </div>
     </div>
 
-    <!-- Step 2: Chat -->
+    <!-- Step 3: AIChat -->
     <div v-if="step === 'chat'" class="step-chat">
       <div class="message-list">
         <div v-if="chatMessages.length === 0" class="chat-hint">
