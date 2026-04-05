@@ -14,6 +14,18 @@ Open [http://localhost:4111](http://localhost:4111) in your browser to access [M
 
 You can start editing files inside the `src/mastra` directory. The development server will automatically reload whenever you make changes.
 
+## Frontend
+
+A separate Vue + Vite frontend lives in `src/frontend`.
+
+Start it with:
+
+```shell
+pnpm run dev:frontend
+```
+
+By default it runs on [http://localhost:5173](http://localhost:5173) and proxies `/api` to Mastra Studio on port `4111`.
+
 ## Learn more
 
 To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).

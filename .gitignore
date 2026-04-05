@@ -9,3 +9,4 @@ dist
 *.db-*
 .netlify
 .vercel
+*.tsbuildinfo
